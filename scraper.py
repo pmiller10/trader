@@ -1,25 +1,33 @@
 from urllib2 import urlopen
 import re
 import time
+import logging
+logging.basicConfig(filename='logs/system.log',level=logging.DEBUG)
 
 class Forex():
 
     url = "http://www.forexrate.co.uk/"
-    duration = 30
+    duration = 300
     train = 'data/train.csv'
     last_scrape = time.time()
+    log = logging.getLogger('Forex')
 
     @classmethod
     def current_rates(self):
         self.last_scrape = time.time()
+        self.log.info("Beginning scrape. last_scrape={0}".format(self.last_scrape))
         html = urlopen(self.url).read()
         rate_names = ["GBPUSD_rate", "EURUSD_rate", "GBPEUR_rate", "AUDUSD_rate", "NZDUSD_rate"]
         rates = []
         for name in rate_names:
             regex = 'span id=\"{0}\">(.*)<\/span> <img'.format(name)
             match = re.search(regex, html)
-            rate = match.groups()[0]
-            rates.append(rate)
+            if match:
+                rate = match.groups()[0]
+                rates.append(rate)
+            else:
+                self.log.error("There were no match groups for regex '{0}'".format(regex))
+                rates.append('') # so that it puts in a comma into the train.csv file
         return rates
 
     @classmethod
@@ -40,8 +48,11 @@ class Forex():
         while True:
             rates = Forex.current_rates()
             self.write(rates)
-            until_next_scrape = (self.last_scrape + 30) - time.time()
-            time.sleep(until_next_scrape)
+            until_next_scrape = (self.last_scrape + self.duration) - time.time()
+            if until_next_scrape > 0:
+                time.sleep(until_next_scrape)
+            else:
+                self.log.warn("It took longer than {0} seconds to run the scrape. It took {1} seconds".format(self.duration, (time.time() - self.last_scrape)))
 
 if __name__ == "__main__":
     Forex.scrape()
